@@ -1,4 +1,4 @@
-/**
+/*
  * Tasmota to Zigbee2MQTT Bridge for Matterbridge
  *
  * Copyright (c) 2026 <DEIN NAME ODER GITHUB USERNAME>
@@ -11,23 +11,16 @@
  * so they can be discovered and controlled via matterbridge-zigbee2mqtt plugin
  *
  * Requirements:
- * • ioBroker MQTT Client adapter (mqtt.x)
+ * • ioBroker MQTT Srever/Broker adapter (mqtt.x)
  * • Tasmota publishes discovery messages (SetOption19 0)
  *
- * Recommended MQTT adapter settings:
- *   Subscribe patterns:
- *     zigbee2mqtt/#
- *     tasmota/#
- *     cmnd/#
- *     stat/#
- *     tete/#
  */
 
 // ==================== CONFIGURATION ====================
 
 const CONFIG = {
     // MQTT related settings
-    mqttAdapter: 'mqtt.3',              // ← CHANGE THIS to your actual MQTT adapter instance!
+    mqttAdapter: 'mqtt.0',              // ← CHANGE THIS to your actual MQTT adapter instance!
     tasmotaBaseTopic: 'tasmota',        // Default Tasmota topic prefix
     z2mBaseTopic: 'zigbee2mqtt',        // Topic prefix we want to emulate
 

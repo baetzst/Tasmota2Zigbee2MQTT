@@ -30,7 +30,7 @@ So your Tasmota devices appear as native Zigbee2MQTT devices to Matterbridge.
 
 * **ioBroker**
 * **JavaScript Adapter**
-* **MQTT Client Adapter** (`mqtt.x`)
+* **MQTT Server/Broker Adapter** (`mqtt.x`)
 * Tasmota devices with MQTT enabled
 
 ### Tasmota Settings
@@ -49,20 +49,6 @@ tasmota/your-device-topic/...
 
 ---
 
-## Recommended MQTT Adapter Settings
-
-Subscribe patterns:
-
-```
-zigbee2mqtt/#
-tasmota/#
-cmnd/#
-stat/#
-tele/#
-```
-
----
-
 ## Installation
 
 1. Install ioBroker JavaScript Adapter.
@@ -71,7 +57,7 @@ tele/#
 
 ```js
 const CONFIG = {
-    mqttAdapter: 'mqtt.3',   // Change to your MQTT adapter instance
+    mqttAdapter: 'mqtt.0',   // Change to your MQTT broker instance
     tasmotaBaseTopic: 'tasmota',
     z2mBaseTopic: 'zigbee2mqtt',
     debug: false
@@ -88,7 +74,7 @@ const CONFIG = {
 | ------------------------------ | ----------------------------- |
 | `tasmota/discovery/.../config` | `zigbee2mqtt/bridge/devices`  |
 | `stat/device/POWER`            | `zigbee2mqtt/<friendly_name>` |
-| `zigbee2mqtt/<device>/set`     | `cmnd/device/POWER`           |
+| `cmnd/device/POWER`            | `zigbee2mqtt/<device>/set`    |
 
 The script:
 

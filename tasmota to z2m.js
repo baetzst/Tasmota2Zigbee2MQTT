@@ -11,89 +11,91 @@
  * so they can be discovered and controlled via matterbridge-zigbee2mqtt plugin
  *
  * Requirements:
- * • ioBroker MQTT Srever/Broker adapter (mqtt.x)
+ * • ioBroker MQTT Client adapter (mqtt.x)
  * • Tasmota publishes discovery messages (SetOption19 0)
  *
  */
 
-// ==================== CONFIGURATION ====================
+// ==================== KONFIGURATION ====================
 
 const CONFIG = {
-    // MQTT related settings
-    mqttAdapter: 'mqtt.0',              // ← CHANGE THIS to your actual MQTT adapter instance!
-    tasmotaBaseTopic: 'tasmota',        // Default Tasmota topic prefix
-    z2mBaseTopic: 'zigbee2mqtt',        // Topic prefix we want to emulate
+    // MQTT Topics
+    mqttAdapter: 'mqtt.0',              // MQTT Client Adapter Instanz (ANPASSEN!)
+    tasmotaBaseTopic: 'tasmota',        // Tasmota Base Topic
+    z2mBaseTopic: 'zigbee2mqtt',        // Emuliertes Zigbee2MQTT Base Topic
+    
+    // Bridge Einstellungen
+    bridgeVersion: '1.39.0',            // Emulierte Z2M Version
+    bridgeCommit: 'tasmota-bridge',     // Commit Hash
+    refreshInterval: 60,                // Wie oft bridge/devices info republished werden in Sekunden
 
-    // Emulated bridge information
-    bridgeVersion: '2.7.1',             // Fake Zigbee2MQTT version
-    bridgeCommit: 'tasmota-bridge',     // Fake commit hash
-    refreshInterval: 60,                // How often to republish bridge/devices info (seconds)
-
-    // Fake coordinator information (important for Zigbee2MQTT to accept the bridge)
+    // Fake coordinator Informationen
     coordinatorIeee: '0x00dead0beef0babe',
     coordinatormodel: 'Tasmota Bridge',
     coordinatorvendor: 'Tasmota',
     coordinatordescription: 'Tasmota to Zigbee2MQTT Virtual Bridge Coordinator',
 
-    // Debug & logging
-    debug: false,                       // Set to true for detailed debug output
+    // Logging
+    debug: false,                       // Debug-Ausgaben aktivieren
 };
 
-// ==================== GLOBAL STATE ====================
+														 
 
-// Stores all known Tasmota to Zigbee2MQTT device mappings
-let tasmotaDevices = new Map(); // Map<MAC-address, DeviceInfo>
+// ==================== GLOBALE VARIABLEN ====================
+															   
 
-let initialized = false;        // Prevents premature publishing during startup
+let tasmotaDevices = new Map(); // Map<MAC, DeviceInfo>
+let initialized = false;
 
-// ==================== HELPER FUNCTIONS ====================
+// ==================== HILFSFUNKTIONEN ====================
 
 /**
- * Debug logging (only active when CONFIG.debug = true)
+ * Logging-Funktionen
  */
 function logDebug(msg) {
     if (CONFIG.debug) console.log(`[DEBUG] ${msg}`);
 }
 
-/**
- * Normal information logging
- */
+   
+							 
+   
 function logInfo(msg) {
     console.log(`[INFO] ${msg}`);
 }
 
-/**
- * Error logging
- */
+   
+				
+   
 function logError(msg) {
     console.error(`[ERROR] ${msg}`);
 }
 
 /**
- * Converts Tasmota MAC address format to Zigbee IEEE address format
- * Example: "600194CC5E44" → "0x0000600194cc5e44"
+ * Konvertiert Tasmota MAC zu Zigbee IEEE Address
+ * Beispiel: "600194CC5E44" -> "0x0000600194cc5e44"
  */
 function macToIeee(mac) {
     return `0x0000${mac.toLowerCase()}`;
 }
 
 /**
- * Creates a Zigbee2MQTT compatible device definition from Tasmota discovery data
- * Currently supports only simple on/off relays (single/multi channel)
- *
- * @param {Object} tasmotaConfig - parsed Tasmota discovery payload
- * @returns {Object} Zigbee2MQTT style device definition
+ * Erstellt eine Zigbee2MQTT Device Definition für einen Tasmota Switch
+																	  
+  
+																   
+														
  */
 function createZ2MDeviceDefinition(tasmotaConfig) {
     const mac = tasmotaConfig.mac;
     const ieee = macToIeee(mac);
     const friendlyName = tasmotaConfig.dn || tasmotaConfig.t || `Tasmota_${mac}`;
-
+    
+    // Prüfe welche Features das Gerät hat
     const hasRelay = tasmotaConfig.rl && tasmotaConfig.rl.some(r => r === 1);
-
+    
     const exposes = [];
-
-    // Basic on/off switch functionality
+    
+    // Switch oder Light Expose
     if (hasRelay) {
         exposes.push({
             type: "switch",
@@ -112,8 +114,8 @@ function createZ2MDeviceDefinition(tasmotaConfig) {
             ]
         });
     }
-
-    // Almost every Zigbee device publishes linkquality
+    
+    // Linkquality
     exposes.push({
         access: 1,
         category: "diagnostic",
@@ -126,7 +128,7 @@ function createZ2MDeviceDefinition(tasmotaConfig) {
         value_max: 255,
         value_min: 0
     });
-
+    
     return {
         ieee_address: ieee,
         type: 'Router',
@@ -166,7 +168,7 @@ function createZ2MDeviceDefinition(tasmotaConfig) {
 }
 
 /**
- * Creates the bridge/info payload that Zigbee2MQTT expects
+ * Erstellt die Zigbee2MQTT Bridge Info
  */
 function createBridgeInfo() {
     return {
@@ -194,7 +196,7 @@ function createBridgeInfo() {
         log_level: CONFIG.debug ? 'debug' : 'error',
         permit_join: false,
         restart_required: false,
-        // ... many more config fields that most integrations just ignore
+																		 
         config: {
             advanced: {
                 output: 'json',
@@ -240,54 +242,56 @@ function createBridgeInfo() {
 }
 
 /**
- * Publishes a message to a Zigbee2MQTT-style topic using ioBroker states
- * (ioBroker MQTT adapter will translate it to real MQTT)
+ * Publiziert eine MQTT Nachricht
+														 
  */
 function publishMqtt(topic, payload, retain = false) {
     const fullTopic = `${CONFIG.z2mBaseTopic}/${topic}`;
-    const payloadStr = typeof payload === 'object' ? JSON.stringify(payload) : String(payload);
+    const payloadStr = typeof payload === 'object' ? JSON.stringify(payload) : payload;
+    
+    sendTo(CONFIG.mqttAdapter, 'sendMessage2Client', {
 
-    const stateId = `${CONFIG.mqttAdapter}.${fullTopic.replace(/\//g, '.')}`;
+										   
+								 
+										  
+        topic: fullTopic,
+        message: payloadStr
+						 
+					   
+					   
+    });
+    
 
-    // Create state if it doesn't exist yet
-    if (!existsObject(stateId)) {
-        createState(stateId, payloadStr, {
-            name: fullTopic,
-            type: 'string',
-            role: 'json',
-            read: true,
-            write: true
-        });
-    } else {
+											 
+	 
 
-        setState(stateId, payloadStr, false);
-    }
+    logDebug(`Published: ${fullTopic} = ${payloadStr.substring(0, 100)}${payloadStr.length > 100 ? '...' : ''}`);
+ 
 
-    logDebug(`Published: ${fullTopic} ${payloadStr.length > 120 ? '= ' + payloadStr.substring(0, 120) + '...' : '= ' + payloadStr}`);
+   
+														  
+   
+														  
+																		   
+
+							 
+										 
+											   
+
+										   
+																 
 }
 
 /**
- * Sends POWER command to Tasmota device via ioBroker MQTT
- */
-function sendTasmotaCommand(deviceTopic, command, value) {
-    const stateId = `${CONFIG.mqttAdapter}.cmnd.${deviceTopic}.${command}`;
-
-    let numericValue = value;
-    if (value === 'ON') numericValue = 1;
-    else if (value === 'OFF') numericValue = 0;
-
-    setState(stateId, numericValue, false);
-    logDebug(`Tasmota cmd ${deviceTopic}/${command} = ${value}`);
-}
-
-/**
- * Publishes all important bridge information topics that Zigbee2MQTT expects
+ * Publiziert alle Bridge-Topics mit Delays
  */
 async function publishBridgeTopics() {
+    // Bridge Info
     publishMqtt('bridge/info', createBridgeInfo(), true);
-
+    
+    // Bridge Devices
     const devices = [
-        // Virtual coordinator device
+									 
         {
             disabled: false,
             friendly_name: "Coordinator",
@@ -304,89 +308,113 @@ async function publishBridgeTopics() {
                 description: CONFIG.coordinatordescription
             }
         },
-        // All discovered Tasmota  Z2M devices
+        // alle Tasmota Geräte
         ...Array.from(tasmotaDevices.values()).map(dev => dev.z2mDevice)
     ];
 
     publishMqtt('bridge/devices', devices, true);
+    
+    // Bridge Groups
     publishMqtt('bridge/groups', [], true);
+    
+    // Bridge Extensions
     publishMqtt('bridge/extensions', [], true);
-    publishMqtt('bridge/state', { state: 'online' }, true);
-
-    logDebug(`Bridge topics refreshed - ${devices.length} devices total (incl. coordinator)`);
+    
+    // Bridge State
+    publishMqtt('bridge/state', {state: 'online'}, true);
+    
+    logDebug(`Bridge topics published with ${devices.length} devices (including coordinator)`);
 }
 
 /**
- * Publishes current device state + availability in Z2M format
+ * Publiziert Device State und Availability
  */
 function publishDeviceState(mac, state) {
     const device = tasmotaDevices.get(mac);
     if (!device) return;
-
+    
     const friendlyName = device.z2mDevice.friendly_name;
-
+    
     const payload = {
         state: state ? 'ON' : 'OFF',
-        linkquality: 255                     // We always pretend excellent signal
+        linkquality: 255
     };
 
     publishMqtt(friendlyName, payload);
     publishMqtt(`${friendlyName}/availability`, { state: 'online' });
-
-    logDebug(`State published: ${friendlyName} ${JSON.stringify(payload)}`);
+    
+    logDebug(`Published state for ${friendlyName}: ${JSON.stringify(payload)}`);
 }
 
-// ==================== TASMOTA DISCOVERY & STATUS ====================
+// ==================== TASMOTA DISCOVERY HANDLER ====================
 
+/**
+ * Verarbeitet Tasmota Discovery Nachrichten
+ */
 function handleTasmotaDiscovery(stateId) {
     try {
         const state = getState(stateId);
-        if (!state?.val) return;
-
+        if (!state || !state.val) {
+            logError(`Discovery state not found or empty: ${stateId}`);
+            return;
+        }
+        
         const config = JSON.parse(state.val);
         const mac = config.mac;
-
+        
         if (!mac) {
-            logError('Discovery payload without MAC address');
+            logError('Discovery message without MAC address');
             return;
         }
-
-        // Currently we only support devices with at least one relay
-        const hasRelay = config.rl?.some(r => r === 1);
+        
+        // Prüfen ob Gerät Relais hat
+        const hasRelay = config.rl?.some(r => r === 1);      
         if (!hasRelay) {
-            logDebug(`Skipping ${config.dn || mac} - no relay found`);
+            logDebug(`Device ${config.dn} has no relay, skipping`);
             return;
         }
+        
+        // Gerät zur Map hinzufügen
+        if (!tasmotaDevices.has(mac)) {
 
-        if (tasmotaDevices.has(mac)) return; // already known
+            const z2mDevice = createZ2MDeviceDefinition(config);
 
-        const z2mDevice = createZ2MDeviceDefinition(config);
-
-        tasmotaDevices.set(mac, {
-            mac: mac,
-            config: config,
-            z2mDevice: z2mDevice,
-            topic: config.t,
-            lastState: null
-        });
-
-        logInfo(`New Tasmota device discovered: ${config.dn || 'unnamed'} (${mac})`);
-
-        if (initialized) {
-            publishBridgeTopics();
+            tasmotaDevices.set(mac, {
+                mac: mac,
+                config: config,
+                z2mDevice: z2mDevice,
+                topic: config.t,
+                lastState: null
+            });
+            
+            logInfo(`Discovered Tasmota device: ${config.dn} (${mac}) - Type: ${z2mDevice.definition.exposes[0].type}`);
+            
+            // Bridge Topics aktualisieren
+            if (initialized) {
+                publishBridgeTopics();
+            }
+            
+            // Initialen State abfragen
+            sendTo(CONFIG.mqttAdapter, 'sendMessage2Client', {
+                topic: `cmnd/${config.t}/POWER`,
+                message: ''
+            });
         }
 
-        sendTasmotaCommand(config.t, 'POWER', null);
+													
 
     } catch (e) {
-        logError(`Discovery parsing error: ${e.message}`);
+        logError(`Error processing discovery: ${e.message}`);
     }
 }
 
+/**
+ * Verarbeitet Tasmota Status Nachrichten
+ */
 function handleTasmotaStatus(mac, state) {
     const device = tasmotaDevices.get(mac);
     if (!device) return;
-
+    
     const newState = state === 'ON';
 
     if (device.lastState !== newState) {
@@ -395,121 +423,166 @@ function handleTasmotaStatus(mac, state) {
     }
 }
 
-// ==================== ZIGBEE2MQTT to TASMOTA  (Set commands) ====================
+// ==================== ZIGBEE2MQTT COMMAND HANDLER ====================
 
+/**
+ * Verarbeitet Zigbee2MQTT Set Commands
+ */
 function handleZ2MSetCommand(friendlyName, payload) {
-    logDebug(`Z2M set command received for ${friendlyName}: ${payload}`);
-
-    let targetDevice = null;
-    for (const dev of tasmotaDevices.values()) {
+    logDebug(`Received Z2M command for ${friendlyName}: ${payload}`);
+    
+    // Finde Gerät anhand friendly_name
+    let device = null;
+    for (const [mac, dev] of tasmotaDevices) {
         if (dev.z2mDevice.friendly_name === friendlyName) {
-            targetDevice = dev;
+            device = dev;
             break;
         }
     }
-
-    if (!targetDevice) {
-        logError(`Device not found for set command: ${friendlyName}`);
+    
+    if (!device) {
+        logError(`Device ${friendlyName} not found for set command`);
         return;
     }
-
+    
     try {
         const cmd = JSON.parse(payload);
-
+        
+        // State (ON/OFF)
         if ('state' in cmd) {
-            const tasmotaValue = String(cmd.state).toUpperCase();
-            if (['ON', 'OFF', 'TOGGLE'].includes(tasmotaValue)) {
-                sendTasmotaCommand(targetDevice.topic, 'POWER', tasmotaValue);
-                logDebug(`${targetDevice.topic} POWER ${tasmotaValue}`);
-            }
+            const tasmotaCmd = cmd.state.toUpperCase();
+            sendTo(CONFIG.mqttAdapter, 'sendMessage2Client', {
+                topic: `cmnd/${device.topic}/POWER`,
+                message: tasmotaCmd
+            });
+            logDebug(`Sending POWER command to ${device.topic}: ${tasmotaCmd}`);
         }
-        // Future: can be extended for brightness, color etc.
+															 
     } catch (e) {
-        logError(`Invalid set payload: ${e.message}`);
+        logError(`Error processing set command: ${e.message}`);
     }
 }
 
-// ==================== SUBSCRIPTIONS & STARTUP ====================
+// ==================== SUBSCRIPTIONS ====================
 
+/**
+ * Richtet alle erforderlichen Subscriptions ein
+ */
 function setupSubscriptions() {
-    // 1. Tasmota discovery messages
+    // Tasmota Discovery überwachen
     const discoveryPattern = `${CONFIG.mqttAdapter}.${CONFIG.tasmotaBaseTopic}.discovery.*.config`;
-    $(discoveryPattern).on(obj => handleTasmotaDiscovery(obj.id));
-    logInfo(`Subscribed to discovery: ${discoveryPattern}`);
-
-    // 2. Tasmota power state changes
+    $(discoveryPattern).on((obj) => {
+        handleTasmotaDiscovery(obj.id);
+    });
+    logInfo(`Subscribed to Tasmota discovery: ${discoveryPattern}`);
+    
+    // Tasmota Status überwachen (stat topics)
     const statPattern = `${CONFIG.mqttAdapter}.stat.*.POWER`;
-    $(statPattern).on(obj => {
+    $(statPattern).on((obj) => {
         const state = obj.state.val;
         const parts = obj.id.split('.');
         const topic = parts[parts.length - 2];
-
-        for (const [mac, dev] of tasmotaDevices) {
-            if (dev.topic === topic) {
+        
+        // MAC finden
+        for (const [mac, device] of tasmotaDevices) {
+            if (device.topic === topic) {
                 handleTasmotaStatus(mac, state);
                 break;
             }
         }
     });
-    logInfo(`Subscribed to status: ${statPattern}`);
+    logInfo(`Subscribed to Tasmota status: ${statPattern}`);
+    
+    // Zigbee2MQTT Set Commands überwachen
+    const z2mSetRegex = new RegExp(
+        `^${CONFIG.mqttAdapter}\\.${CONFIG.z2mBaseTopic}\\.([^\\.]+)\\.set$`
+    );
 
-    // 3. Zigbee2MQTT set commands (someone wants to turn on/off device)
-    const z2mSetPattern = `${CONFIG.mqttAdapter}.${CONFIG.z2mBaseTopic}.*.set`;
-    $(z2mSetPattern).on(obj => {
+    on({ id: z2mSetRegex, change: 'any' }, (obj) => {
         const payload = obj.state.val;
         const parts = obj.id.split('.');
         const friendlyName = parts[parts.length - 2];
 
         handleZ2MSetCommand(friendlyName, payload);
     });
-    logInfo(`Subscribed to Z2M commands: ${z2mSetPattern}`);
+
+    logInfo(`Subscribed to Z2M commands: ${CONFIG.mqttAdapter}.${CONFIG.z2mBaseTopic}.*.set`);
 }
 
+/**
+ * Scannt existierende Discovery Nachrichten
+ */
 function scanExistingDevices() {
-    const pattern = `${CONFIG.mqttAdapter}.${CONFIG.tasmotaBaseTopic}.discovery.*.config`;
-    logInfo('Scanning for already discovered Tasmota devices...');
-
-    $(pattern).each(id => handleTasmotaDiscovery(id));
-
-    logInfo(`Found ${tasmotaDevices.size} existing device(s)`);
+    const discoveryPattern = `${CONFIG.mqttAdapter}.${CONFIG.tasmotaBaseTopic}.discovery.*.config`;
+    const existingDevices = $(discoveryPattern);
+    
+    logInfo(`Scanning for existing Tasmota devices...`);
+    existingDevices.each((id) => {
+        handleTasmotaDiscovery(id);
+    });
+    
+    logInfo(`Found ${tasmotaDevices.size} Tasmota device(s)`);
 }
 
+// ==================== INITIALISIERUNG ====================
+							  
+																	   
+							  
+
+/**
+ * Initialisiert die Bridge
+ */
 async function initialize() {
-    logInfo('═'.repeat(70));
-    logInfo('Starting Tasmota to Zigbee2MQTT Bridge for Matterbridge');
-    logInfo('═'.repeat(70));
-
+    logInfo('='.repeat(60));
+    logInfo('Tasmota to Zigbee2MQTT Bridge starting...');
+    logInfo('='.repeat(60));
+    
+    // Subscriptions einrichten
     setupSubscriptions();
+    
+    // Existierende Geräte scannen
     scanExistingDevices();
-
+    
+    // Bridge Topics publizieren (mit Delays)
     await publishBridgeTopics();
-
+    
+    // Initialisierung abgeschlossen
     initialized = true;
-
-    // Keep bridge info fresh (some integrations periodically check)
+    
+    // Periodic refresh alle 60 Sekunden
     setInterval(() => {
-        if (initialized) publishBridgeTopics();
+        if (initialized) {
+            publishBridgeTopics();
+            logDebug('Periodic refresh of bridge topics');
+        }
     }, CONFIG.refreshInterval * 1000);
 
-    logInfo('Bridge successfully initialized!');
-    logInfo(`Zigbee2MQTT emulation on topic: ${CONFIG.z2mBaseTopic}`);
-    logInfo(`Watching Tasmota devices on:    ${CONFIG.tasmotaBaseTopic}`);
-    logInfo('═'.repeat(70));
+    logInfo('='.repeat(60));
+    logInfo('Bridge initialized successfully!');
+    logInfo(`Emulating Zigbee2MQTT on topic: ${CONFIG.z2mBaseTopic}`);
+    logInfo(`Monitoring Tasmota devices on topic: ${CONFIG.tasmotaBaseTopic}`);
+    logInfo('='.repeat(60));
 }
 
+/**
+ * Cleanup beim Stoppen
+ */
 onStop(() => {
-    logInfo('Bridge shutting down...');
-
-    publishMqtt('bridge/state', { state: 'offline' }, true);
-
-    for (const dev of tasmotaDevices.values()) {
-        const name = dev.z2mDevice.friendly_name;
-        publishMqtt(`${name}/availability`, { state: 'offline' });
+    logInfo('Bridge stopping...');
+    
+    // Bridge offline setzen
+    publishMqtt('bridge/state', {state: 'offline'}, true);
+    
+    // Alle Geräte offline setzen
+    for (const [mac, device] of tasmotaDevices) {
+        const friendlyName = device.z2mDevice.friendly_name;
+        publishMqtt(`${friendlyName}/availability`, {state: 'offline'});
     }
-
+    
     logInfo('Bridge stopped');
 }, 1000);
 
-// ==================== STARTUP ====================
+// ==================== START ====================
 
+// Warte kurz, damit ioBroker alle States geladen hat
 setTimeout(initialize, 2000);

@@ -30,7 +30,7 @@ So your Tasmota devices appear as native Zigbee2MQTT devices to Matterbridge.
 
 * **ioBroker**
 * **JavaScript Adapter**
-* **MQTT Server/Broker Adapter** (`mqtt.x`)
+* **MQTT Client Adapter** (`mqtt.x`)
 * Tasmota devices with MQTT enabled
 
 ### Tasmota Settings

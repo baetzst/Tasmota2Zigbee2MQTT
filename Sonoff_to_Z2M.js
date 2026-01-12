@@ -1,13 +1,11 @@
 /*
- * Tasmota to Zigbee2MQTT Bridge for Matterbridge
+ * Sonoff to Zigbee2MQTT Bridge for Matterbridge
  *
  * Copyright (c) 2026 baetzst
  *
  * Licensed under the MIT License.
  * You may obtain a copy of the License at:
  * https://opensource.org/licenses/MIT
- *
- * Sonoff to Zigbee2MQTT Bridge for Matterbridge
  *
  * This script emulates Zigbee2MQTT topics for Sonoff devices,
  * so they can be made available via Matterbridge.

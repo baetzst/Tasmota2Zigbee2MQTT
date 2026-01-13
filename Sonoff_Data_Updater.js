@@ -48,6 +48,9 @@ function logError(msg) {
  * Safely reads a state value
  */
 function getStateValue(stateId) {
+    if (!existsState(stateId)) {
+        return null;
+    }
     const state = getState(stateId);
     return state ? state.val : null;
 }

@@ -306,7 +306,7 @@ async function publishBridgeTopics() {
     // Bridge State
     publishMqtt('bridge/state', {state: 'online'}, true);
    
-    logInfo(`Bridge topics published with ${devices.length} devices (including coordinator)`);
+    logDebug(`Bridge topics published with ${devices.length} devices (including coordinator)`);
 }
 /**
  * Publishes device state and availability to Zigbee2MQTT topics

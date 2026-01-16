@@ -29,11 +29,13 @@ const CONFIG = {
     bridgeVersion: '1.39.0',         // Emulated Z2M version
     bridgeCommit: 'sonoff-bridge',   // Commit hash
     refreshInterval: 60,             // How often bridge/devices info should be republished (seconds)
+    
     // Fake coordinator information
     coordinatorIeee: '0x00dead0beef0babe',
     coordinatormodel: 'Sonoff Bridge',
     coordinatorvendor: 'Sonoff',
     coordinatordescription: 'Sonoff to Zigbee2MQTT Virtual Bridge Coordinator',
+    
     // Logging
     debug: false,                    // Enable debug output
 };
@@ -101,6 +103,7 @@ function parseGPIOs(friendlyName) {
 }
 /**
  * Creates a Zigbee2MQTT-style device definition for a Sonoff switch
+ * CHANGED: Now supports multi-relay devices with endpoints
  */
 function createZ2MDeviceDefinition(deviceInfo) {
     const mac = deviceInfo.mac;
@@ -109,24 +112,31 @@ function createZ2MDeviceDefinition(deviceInfo) {
    
     const exposes = [];
    
-    // Switch expose (only for single-relay devices in phase 1)
-    if (deviceInfo.relayCount === 1) {
-        exposes.push({
-            type: "switch",
-            features: [
-                {
-                    access: 7, // read/write/publish
-                    description: "On/off state of this switch",
-                    label: "State",
-                    name: "state",
-                    property: "state",
-                    type: "binary",
-                    value_off: "OFF",
-                    value_on: "ON",
-                    value_toggle: "TOGGLE"
-                }
-            ]
-        });
+    // CHANGED: Create expose for each relay with endpoint
+    if (deviceInfo.relayCount > 0) {
+        for (let i = 1; i <= deviceInfo.relayCount; i++) {
+            const endpoint = `l${i}`;
+            const property = deviceInfo.relayCount === 1 ? 'state' : `state_l${i}`;
+            
+            exposes.push({
+                endpoint: endpoint,
+                type: "switch",
+                features: [
+                    {
+                        access: 7, // read/write/publish
+                        description: "On/off state of the switch",
+                        endpoint: endpoint,
+                        label: "State",
+                        name: "state",
+                        property: property,
+                        type: "binary",
+                        value_off: "OFF",
+                        value_on: "ON",
+                        value_toggle: "TOGGLE"
+                    }
+                ]
+            });
+        }
     }
    
     // Linkquality
@@ -142,6 +152,21 @@ function createZ2MDeviceDefinition(deviceInfo) {
         value_max: 255,
         value_min: 0
     });
+   
+    // CHANGED: Create endpoints for each relay
+    const endpoints = {};
+    for (let i = 1; i <= deviceInfo.relayCount; i++) {
+        endpoints[i.toString()] = {
+            bindings: [],
+            clusters: {
+                input: ['genBasic', 'genIdentify', 'genOnOff'],
+                output: []
+            },
+            configured_reportings: [],
+            name: `l${i}`,
+            scenes: []
+        };
+    }
    
     return {
         ieee_address: ieee,
@@ -162,17 +187,7 @@ function createZ2MDeviceDefinition(deviceInfo) {
         power_source: 'Mains (single phase)',
         model_id: deviceInfo.model || 'Generic',
         manufacturer: 'Sonoff',
-        endpoints: {
-            '1': {
-                bindings: [],
-                clusters: {
-                    input: ['genBasic', 'genIdentify', 'genOnOff'],
-                    output: []
-                },
-                configured_reportings: [],
-                scenes: []
-            }
-        },
+        endpoints: endpoints,
         interview_completed: true,
         interviewing: false,
         interview_state: "SUCCESSFUL",
@@ -310,17 +325,30 @@ async function publishBridgeTopics() {
 }
 /**
  * Publishes device state and availability to Zigbee2MQTT topics
+ * CHANGED: Now supports multi-relay devices with state_l1, state_l2, etc.
  */
-function publishDeviceState(mac, state, available = true) {
+function publishDeviceState(mac, states, available = true) {
     const device = sonoffDevices.get(mac);
     if (!device) return;
    
     const friendlyName = device.z2mDevice.friendly_name;
    
+    // Build payload with all relay states
     const payload = {
-        state: state ? 'ON' : 'OFF',
         linkquality: 255
     };
+    
+    // CHANGED: Add state for each relay
+    if (device.relayCount === 1) {
+        // Single relay: use "state"
+        payload.state = states[0] ? 'ON' : 'OFF';
+    } else {
+        // Multi relay: use "state_l1", "state_l2", etc.
+        for (let i = 0; i < device.relayCount; i++) {
+            payload[`state_l${i + 1}`] = states[i] ? 'ON' : 'OFF';
+        }
+    }
+    
     publishMqtt(friendlyName, payload);
     publishMqtt(`${friendlyName}/availability`, { state: available ? 'online' : 'offline' });
    
@@ -358,10 +386,11 @@ function scanSonoffDevices() {
         processSonoffDevice(friendlyName);
     });
    
-    logInfo(`Registered ${sonoffDevices.size} Sonoff device(s) with single relay`);
+    logInfo(`Registered ${sonoffDevices.size} Sonoff device(s)`);
 }
 /**
  * Processes a single Sonoff device
+ * CHANGED: Now supports multi-relay devices
  */
 function processSonoffDevice(friendlyName) {
     try {
@@ -388,20 +417,20 @@ function processSonoffDevice(friendlyName) {
         // Debug output for all discovered devices
         logDebug(`Device ${friendlyName}: MAC=${mac}, Model=${model}, Version=${version}, Relays=${relayCount}`);
        
-        // Currently only support devices with exactly one relay (Phase 1)
-        if (relayCount !== 1) {
-            logInfo(`Device ${friendlyName} has ${relayCount} relay(s), skipping (only single-relay supported in Phase 1)`);
+        // CHANGED: Accept devices with any number of relays (1-28)
+        if (relayCount === 0 || relayCount > 28) {
+            logInfo(`Device ${friendlyName} has ${relayCount} relay(s), skipping (must have 1-28 relays)`);
             return;
         }
        
-        // Collect device information
+        // CHANGED: Collect device information including relay count
         const deviceInfo = {
             mac: mac,
             friendlyName: friendlyName,
             model: model,
             version: version,
             relayCount: relayCount,
-            lastState: null,
+            lastStates: new Array(relayCount).fill(null),  // CHANGED: Array of states
             lastAvailable: null
         };
        
@@ -412,24 +441,31 @@ function processSonoffDevice(friendlyName) {
         // Add to device map
         sonoffDevices.set(mac, deviceInfo);
        
-        logInfo(`Discovered Sonoff device: ${friendlyName} (${mac}) - Model: ${model}, Version: ${version}`);
+        logInfo(`Discovered Sonoff device: ${friendlyName} (${mac}) - Model: ${model}, Version: ${version}, Relays: ${relayCount}`);
        
-        // Read initial state and availability
-        const powerState = `${CONFIG.sonoffAdapter}.${friendlyName}.POWER`;
-        const power = getStateValue(powerState);
+        // CHANGED: Read initial state for all relays
+        const initialStates = [];
+        for (let i = 1; i <= relayCount; i++) {
+            const powerState = relayCount === 1 
+                ? `${CONFIG.sonoffAdapter}.${friendlyName}.POWER`
+                : `${CONFIG.sonoffAdapter}.${friendlyName}.POWER${i}`;
+            const power = getStateValue(powerState);
+            initialStates.push(power !== null ? power : false);
+            if (power !== null) {
+                deviceInfo.lastStates[i - 1] = power;
+            }
+        }
+        
         const aliveState = `${CONFIG.sonoffAdapter}.${friendlyName}.alive`;
         const alive = getStateValue(aliveState);
        
-        if (power !== null) {
-            deviceInfo.lastState = power;
-        }
         if (alive !== null) {
             deviceInfo.lastAvailable = alive;
         }
        
         // Publish initial state if we already finished initialization
-        if (initialized && power !== null && alive !== null) {
-            publishDeviceState(mac, power, alive);
+        if (initialized && alive !== null) {
+            publishDeviceState(mac, initialStates, alive);
         }
        
     } catch (e) {
@@ -438,8 +474,9 @@ function processSonoffDevice(friendlyName) {
 }
 /**
  * Handles changes of Sonoff POWER state
+ * CHANGED: Now handles POWERx for multi-relay devices
  */
-function handleSonoffPowerChange(friendlyName, state) {
+function handleSonoffPowerChange(friendlyName, relayNum, state) {
     // Find device by friendlyName
     let device = null;
     for (const [mac, dev] of sonoffDevices) {
@@ -455,11 +492,15 @@ function handleSonoffPowerChange(friendlyName, state) {
     }
    
     const newState = state === true || state === 'true' || state === 1;
-   
-    if (device.lastState !== newState) {
-        device.lastState = newState;
-        const available = device.lastAvailable !== false;
-        publishDeviceState(device.mac, newState, available);
+    const relayIndex = relayNum - 1;
+    
+    // CHANGED: Update specific relay state
+    if (relayIndex >= 0 && relayIndex < device.relayCount) {
+        if (device.lastStates[relayIndex] !== newState) {
+            device.lastStates[relayIndex] = newState;
+            const available = device.lastAvailable !== false;
+            publishDeviceState(device.mac, device.lastStates, available);
+        }
     }
 }
 /**
@@ -484,13 +525,13 @@ function handleSonoffAliveChange(friendlyName, alive) {
    
     if (device.lastAvailable !== available) {
         device.lastAvailable = available;
-        const state = device.lastState === true;
-        publishDeviceState(device.mac, state, available);
+        publishDeviceState(device.mac, device.lastStates, available);
     }
 }
 // ==================== ZIGBEE2MQTT COMMAND HANDLER ====================
 /**
  * Handles incoming Zigbee2MQTT set commands
+ * CHANGED: Now handles state_l1, state_l2, etc. for multi-relay devices
  */
 function handleZ2MSetCommand(friendlyName, payload) {
     logDebug(`Received Z2M command for ${friendlyName}: ${payload}`);
@@ -512,16 +553,16 @@ function handleZ2MSetCommand(friendlyName, payload) {
     try {
         const cmd = JSON.parse(payload);
        
-        // State command (ON/OFF/TOGGLE)
-        if ('state' in cmd) {
+        // CHANGED: Handle both single relay "state" and multi-relay "state_lX"
+        
+        // Single relay device: "state"
+        if ('state' in cmd && device.relayCount === 1) {
             const stateCmd = cmd.state.toUpperCase();
             let newState;
            
             if (stateCmd === 'TOGGLE') {
-                // Toggle current state
-                newState = !device.lastState;
+                newState = !device.lastStates[0];
             } else {
-                // Direct ON or OFF
                 newState = stateCmd === 'ON';
             }
            
@@ -529,6 +570,28 @@ function handleZ2MSetCommand(friendlyName, payload) {
             setState(powerState, newState);
            
             logDebug(`Setting POWER for ${device.friendlyName} to ${newState}`);
+        }
+        
+        // Multi-relay device: "state_l1", "state_l2", etc.
+        for (let i = 1; i <= device.relayCount; i++) {
+            const stateProperty = `state_l${i}`;
+            if (stateProperty in cmd) {
+                const stateCmd = cmd[stateProperty].toUpperCase();
+                let newState;
+                
+                if (stateCmd === 'TOGGLE') {
+                    newState = !device.lastStates[i - 1];
+                } else {
+                    newState = stateCmd === 'ON';
+                }
+                
+                const powerState = device.relayCount === 1
+                    ? `${CONFIG.sonoffAdapter}.${device.friendlyName}.POWER`
+                    : `${CONFIG.sonoffAdapter}.${device.friendlyName}.POWER${i}`;
+                setState(powerState, newState);
+                
+                logDebug(`Setting POWER${i} for ${device.friendlyName} to ${newState}`);
+            }
         }
        
     } catch (e) {
@@ -538,16 +601,25 @@ function handleZ2MSetCommand(friendlyName, payload) {
 // ==================== SUBSCRIPTIONS ====================
 /**
  * Sets up all required state subscriptions
+ * CHANGED: Now subscribes to POWERx for multi-relay support
  */
 function setupSubscriptions() {
-    // Watch Sonoff POWER states
-    const powerPattern = `${CONFIG.sonoffAdapter}.*.POWER`;
+    // CHANGED: Watch both POWER and POWERx states (POWER1, POWER2, etc.)
+    const powerPattern = `${CONFIG.sonoffAdapter}.*.POWER*`;
     $(powerPattern).on((obj) => {
         const parts = obj.id.split('.');
-        if (parts.length >= 3) {
+        if (parts.length >= 4) {
             const friendlyName = parts[2];
+            const powerPart = parts[3];
             const state = obj.state.val;
-            handleSonoffPowerChange(friendlyName, state);
+            
+            // Extract relay number (POWER = 1, POWER1 = 1, POWER2 = 2, etc.)
+            let relayNum = 1;
+            if (powerPart.length > 5) { // POWERx
+                relayNum = parseInt(powerPart.substring(5));
+            }
+            
+            handleSonoffPowerChange(friendlyName, relayNum, state);
         }
     });
     logInfo(`Subscribed to Sonoff power states: ${powerPattern}`);

@@ -15,15 +15,15 @@ The solution consists of **two ioBroker JavaScript scripts**:
 
 ## Current Status (January 2026)
 
-| Feature                              | Status       | Notes                                          |
-|--------------------------------------|--------------|------------------------------------------------|
-| Single-relay devices                 | ✓ Working    | Full support (on/off + state feedback)         |
-| Multi-relay devices (>1 channel)     | ⚠ Partial    | Detected, but only first relay is controllable |
-| Automatic device discovery           | ✓            | Via Sonoff adapter + MAC address               |
-| Missing MAC/GPIO auto-recovery       | ✓            | Handled by the Data Updater script             |
-| Bi-directional control               | ✓            | For single-relay devices                       |
-| Fake coordinator & bridge info       | ✓            | Very good compatibility with Matterbridge      |
-| Sensors, dimmers, RGB, power metering| ✗ Not yet    | No plans implemented yet                       |
+| Feature                              | Status    | Notes                                          |
+|--------------------------------------|-----------|------------------------------------------------|
+| Single-relay devices                 | ✓         | Full support                                   |
+| Multi-relay devices (>1 channel)     | ✓         | Full support                                   |
+| Automatic device discovery           | ✓         | Via Sonoff adapter + MAC address               |
+| Missing MAC/GPIO auto-recovery       | ✓         | Handled by the Data Updater script             |
+| Bi-directional control               | ✓         | For single-relay devices                       |
+| Fake coordinator & bridge info       | ✓         | Very good compatibility with Matterbridge      |
+| Sensors, dimmers, RGB, power metering| ✗ Not yet | No plans implemented yet                       |
 
 ## Requirements
 

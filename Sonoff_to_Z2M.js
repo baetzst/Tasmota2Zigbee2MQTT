@@ -369,7 +369,7 @@ function scanSonoffDevices() {
     const deviceFolders = new Set();
    
     allObjects.each((id) => {
-        if (id.includes('.STATUS.StatusNET_Mac')) {
+        if (id.includes('.INFO.Mac')) {
             // Extract friendlyName
             const parts = id.split('.');
             if (parts.length >= 3) {
@@ -395,7 +395,7 @@ function scanSonoffDevices() {
 function processSonoffDevice(friendlyName) {
     try {
         // Read MAC address
-        const macState = `${CONFIG.sonoffAdapter}.${friendlyName}.STATUS.StatusNET_Mac`;
+        const macState = `${CONFIG.sonoffAdapter}.${friendlyName}.INFO.Mac`;
         const mac = getStateValue(macState);
        
         if (!mac) {

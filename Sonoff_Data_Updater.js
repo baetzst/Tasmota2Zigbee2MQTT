@@ -120,7 +120,7 @@ async function processDevice(friendlyName) {
         let gpioRequested = false;
         
         // Check and request MAC address if missing
-        const macState = `${CONFIG.sonoffAdapter}.${friendlyName}.STATUS.StatusNET_Mac`;
+        const macState = `${CONFIG.sonoffAdapter}.${friendlyName}.INFO.Mac`;
         let mac = getStateValue(macState);
         
         if (!mac) {

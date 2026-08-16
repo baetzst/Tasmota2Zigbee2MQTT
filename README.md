@@ -46,23 +46,14 @@ FriendlyName1 LivingRoomPlug
 
 ## Installation
 
-### 1. Install Special Sonoff Adapter
-```bash
-# In ioBroker, install from GitHub URL:
-https://github.com/baetzst/ioBroker.sonoff/tree/feature/mac-datapoint
-```
-
-**Why this special version?**  
-The standard Sonoff adapter doesn't expose the MAC address as a datapoint. This fork adds `STATUS.StatusNET_Mac` which is essential for device identification.
-
-### 2. Configure MQTT Adapter
+### 1. Configure MQTT Adapter
 
 In the MQTT adapter settings, add these subscription patterns:
 ```
 zigbee2mqtt/#
 ```
 
-### 3. Install Scripts
+### 2. Install Scripts
 
 1. Create a new JavaScript in ioBroker
 2. Copy the **Main Bridge Script** content
@@ -80,14 +71,14 @@ zigbee2mqtt/#
 5. Copy the **Data Updater Script** content
 6. Adjust the configuration to match your Sonoff adapter instance
 
-### 4. Run Data Updater (First Time)
+### 3. Run Data Updater (maybe it's not required since sonoff adapter 4.0.0)
 
 1. Start the **Data Updater Script** once manually
 2. It will fetch MAC addresses and GPIO configurations from all online devices
 3. Wait until it completes (check the log)
 4. You can run it periodically (e.g., daily at 3 AM) or manually when adding new devices
 
-### 5. Start Main Bridge
+### 4. Start Main Bridge
 
 1. Start the **Main Bridge Script**
 2. Check logs for discovered devices
@@ -126,7 +117,7 @@ const CONFIG = {
    - Checks for missing GPIO configs → sends `Template` command
    - Waits for Sonoff adapter to create the datapoints
 3. **Main Bridge Script**:
-   - Scans all devices with `STATUS.StatusNET_Mac` datapoint
+   - Scans all devices with `INFO.Mac` datapoint
    - Counts relays via GPIO configuration (values 224-283)
    - Creates Zigbee2MQTT-compatible device definitions
    - Publishes to `zigbee2mqtt/bridge/devices`, etc.
@@ -187,14 +178,14 @@ MQTT state payload:
 ### Devices Not Appearing
 
 1. Enable debug mode: `debug: true`
-2. Check if MAC address exists: `sonoff.0.<device>.STATUS.StatusNET_Mac`
+2. Check if MAC address exists: `sonoff.0.<device>.INFO.Mac`
 3. Check if GPIO states exist: `sonoff.0.<device>.GPIO_*`
 4. Run the **Data Updater Script** manually
 5. Check MQTT adapter subscriptions include `zigbee2mqtt/#`
 
 ### No MAC Address
 
-If `STATUS.StatusNET_Mac` doesn't exist:
+If `INFO.Mac` doesn't exist:
 - Make sure you're using the special Sonoff adapter fork
 - The device must be online
 - Run Data Updater Script → it will send `status 5`

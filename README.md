@@ -29,9 +29,8 @@ The solution consists of **two ioBroker JavaScript scripts**:
 
 - ioBroker
 - JavaScript adapter
-- **Sonoff adapter with MAC datapoint support** (sonoff.x)  
-  ⚠️ **Important:** You need a special build from this fork:  
-  → https://github.com/baetzst/ioBroker.sonoff/tree/feature/mac-datapoint
+- **Sonoff adapter version 4.0.0 or newer**
+   → Version 4.0.0 introduces the required MAC address datapoints
 - **MQTT Client adapter** (mqtt.x)
 - Sonoff/Tasmota devices with MQTT enabled
 - matterbridge + matterbridge-zigbee2mqtt plugin
